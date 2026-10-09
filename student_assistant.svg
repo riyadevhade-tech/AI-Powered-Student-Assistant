@@ -1,0 +1,17 @@
+
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="300" height="300" viewBox="0 0 300 300">
+  <rect width="300" height="300" rx="35" fill="#123B65"/>
+  <path d="M55 105 L150 65 L245 105 L150 145 Z"
+        fill="#FFD166"/>
+  <path d="M90 125 V170 Q150 210 210 170 V125"
+        fill="none" stroke="#FFFFFF" stroke-width="9"/>
+  <path d="M245 105 V165"
+        stroke="#FFD166" stroke-width="7"/>
+  <circle cx="245" cy="178" r="10" fill="#FFD166"/>
+  <text x="150" y="245" font-size="22"
+        text-anchor="middle" fill="#FFFFFF"
+        font-family="Arial" font-weight="bold">
+    STUDENT AI
+  </text>
+</svg>
