@@ -18,6 +18,8 @@ from database import (
     initialize_academic_tables,
     save_chat,
     get_chat_history,
+    delete_chat,
+    clear_chat_history,
     save_assignment,
     get_assignments,
     save_submission,
@@ -258,6 +260,7 @@ elif page == "AI Assistant":
 
         save_chat(question, answer)
         st.success("Chat saved successfully!")
+
 # CHAT HISTORY PAGE
 elif page == "Chat History":
     st.subheader("💬 Saved Chat History")
@@ -265,20 +268,43 @@ elif page == "Chat History":
     history = get_chat_history()
 
     if history:
+        st.warning("Deleted conversations cannot be restored.")
+
+        if st.button("🗑️ Clear All History", key="clear_all_history"):
+            st.session_state["confirm_clear_history"] = True
+
+        if st.session_state.get("confirm_clear_history", False):
+            st.write("Are you sure you want to delete all saved chats?")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                if st.button("Yes, Delete All", key="confirm_delete_all"):
+                    clear_chat_history()
+                    st.session_state["confirm_clear_history"] = False
+                    st.success("All chat history deleted.")
+                    st.rerun()
+
+            with col2:
+                if st.button("Cancel", key="cancel_delete_all"):
+                    st.session_state["confirm_clear_history"] = False
+                    st.rerun()
+
         for row in history:
             with st.expander(f"Question: {row[1]}"):
                 st.write("**Answer:**")
                 st.write(row[2])
                 st.caption(f"Saved on: {row[3]}")
 
+                if st.button("🗑️ Delete This Chat", key=f"delete_chat_{row[0]}"):
+                    delete_chat(row[0])
+                    st.success("Chat deleted.")
+                    st.rerun()
+
         st.success(f"Total saved conversations: {len(history)}")
 
     else:
-        st.info(
-            "No conversations saved yet. "
-            "Open AI Assistant and ask a question first."
-        )
-
+        st.info("No conversations saved yet.")
 # ASSIGNMENTS AND EXAMS PAGE
 elif page == "Assignments & Exams":
     st.subheader("📝 Assignment and Exam Planner")

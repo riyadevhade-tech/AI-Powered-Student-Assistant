@@ -133,3 +133,15 @@ def get_exams():
             FROM exam_timetable
             ORDER BY exam_date, exam_time
         """).fetchall()
+
+def delete_chat(chat_id):
+    with get_connection() as conn:
+        conn.execute(
+            "DELETE FROM chat_history WHERE id = ?",
+            (chat_id,)
+        )
+
+
+def clear_chat_history():
+    with get_connection() as conn:
+        conn.execute("DELETE FROM chat_history")
