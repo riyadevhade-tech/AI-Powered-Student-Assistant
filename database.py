@@ -145,3 +145,73 @@ def delete_chat(chat_id):
 def clear_chat_history():
     with get_connection() as conn:
         conn.execute("DELETE FROM chat_history")
+        
+def initialize_timetable_table():
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS smart_timetable (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject TEXT NOT NULL,
+            day TEXT NOT NULL,
+            start_time TEXT NOT NULL,
+            end_time TEXT NOT NULL,
+            classroom TEXT
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+def save_timetable(subject, day, start_time, end_time, classroom):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO smart_timetable
+        (subject, day, start_time, end_time, classroom)
+        VALUES (?, ?, ?, ?, ?)
+    """, (subject, day, start_time, end_time, classroom))
+
+    conn.commit()
+    conn.close()
+
+
+def get_timetable():
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, subject, day, start_time, end_time, classroom
+        FROM smart_timetable
+        ORDER BY
+            CASE day
+                WHEN 'Monday' THEN 1
+                WHEN 'Tuesday' THEN 2
+                WHEN 'Wednesday' THEN 3
+                WHEN 'Thursday' THEN 4
+                WHEN 'Friday' THEN 5
+                WHEN 'Saturday' THEN 6
+                WHEN 'Sunday' THEN 7
+            END,
+            start_time
+    """)
+
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def delete_timetable_entry(entry_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "DELETE FROM smart_timetable WHERE id = ?",
+        (entry_id,)
+    )
+
+    conn.commit()
+    conn.close()

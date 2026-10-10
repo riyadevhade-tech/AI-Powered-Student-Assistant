@@ -1,5 +1,7 @@
 
 import streamlit as st
+import streamlit.components.v1 as components
+import json
 from io import BytesIO
 from datetime import date
 from reportlab.lib import colors
@@ -12,6 +14,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 from reportlab.lib.styles import getSampleStyleSheet
+
 
 from database import (
     initialize_database,
@@ -27,13 +30,301 @@ from database import (
     update_submission_status,
     save_exam,
     get_exams,
+    initialize_timetable_table,
+    save_timetable,
+    get_timetable,
+    delete_timetable_entry,
 )
+
+def create_timetable_exam_pdf():
+    from datetime import datetime, date, timedelta
+
+    pdf_buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        pdf_buffer,
+        pagesize=A4,
+        rightMargin=30,
+        leftMargin=30,
+        topMargin=35,
+        bottomMargin=35,
+    )
+
+    styles = getSampleStyleSheet()
+    story = []
+
+    # Project title
+    story.append(Paragraph(
+        "AI-Powered Student Assistant",
+        styles["Title"]
+    ))
+    story.append(Paragraph(
+        "Smart Timetable and Examination Report",
+        styles["Heading2"]
+    ))
+    story.append(Paragraph(
+        f"Generated on: {datetime.now().strftime('%d-%m-%Y %I:%M %p')}",
+        styles["Normal"]
+    ))
+    story.append(Spacer(1, 18))
+
+    # Timetable section
+    story.append(Paragraph(
+        "1. Weekly Class Timetable",
+        styles["Heading2"]
+    ))
+
+    timetable = get_timetable()
+
+    timetable_data = [[
+        "Subject", "Day", "Start", "End", "Classroom"
+    ]]
+
+    for item in timetable:
+        start = datetime.strptime(
+            str(item[3]), "%H:%M"
+        ).strftime("%I:%M %p")
+
+        end = datetime.strptime(
+            str(item[4]), "%H:%M"
+        ).strftime("%I:%M %p")
+
+        timetable_data.append([
+            str(item[1]),
+            str(item[2]),
+            start,
+            end,
+            str(item[5] or "Not specified"),
+        ])
+
+    if not timetable:
+        timetable_data.append([
+            "No lectures added", "-", "-", "-", "-"
+        ])
+
+    timetable_table = Table(
+        timetable_data,
+        colWidths=[105, 75, 75, 75, 125],
+        repeatRows=1,
+    )
+
+    timetable_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#24476B")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+    ]))
+
+    story.append(timetable_table)
+    story.append(Spacer(1, 22))
+
+    # Exam section
+    story.append(Paragraph(
+        "2. Examination Schedule",
+        styles["Heading2"]
+    ))
+
+    exams = get_exams()
+
+    exam_data = [[
+        "Subject", "Exam Date", "Time", "Venue"
+    ]]
+
+    for exam in exams:
+        try:
+            exam_date = datetime.strptime(
+                str(exam[2]), "%Y-%m-%d"
+            ).strftime("%d-%m-%Y")
+        except ValueError:
+            exam_date = str(exam[2])
+
+        exam_data.append([
+            str(exam[1]),
+            exam_date,
+            str(exam[3] or "Not specified"),
+            str(exam[4] or "Not specified"),
+        ])
+
+    if not exams:
+        exam_data.append([
+            "No exams scheduled", "-", "-", "-"
+        ])
+
+    exam_table = Table(
+        exam_data,
+        colWidths=[105, 90, 85, 175],
+        repeatRows=1,
+    )
+
+    exam_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#176B57")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+    ]))
+
+    story.append(exam_table)
+
+    doc.build(story)
+    pdf_buffer.seek(0)
+
+    return pdf_buffer.getvalue()
+
+
+def send_browser_notifications(notifications):
+    import json
+
+    payload = json.dumps(notifications)
+
+    components.html(
+        f"""
+        <script>
+        const reminders = {payload};
+
+        async function showReminders() {{
+            if (!("Notification" in window)) return;
+
+            let permission = Notification.permission;
+
+            if (permission === "default") {{
+                permission = await Notification.requestPermission();
+            }}
+
+            if (permission !== "granted") return;
+
+            const key = "student_assistant_notifications";
+            const shown = JSON.parse(localStorage.getItem(key) || "[]");
+
+            for (const item of reminders) {{
+                if (!shown.includes(item.id)) {{
+                    new Notification(item.title, {{ body: item.body }});
+                    shown.push(item.id);
+                }}
+            }}
+
+            localStorage.setItem(key, JSON.stringify(shown));
+        }}
+
+        showReminders();
+        </script>
+        """,
+        height=0,
+    )
+
 
 st.set_page_config(
     page_title="AI-Powered Student Assistant",
     page_icon="🎓",
     layout="wide",
 )
+
+
+# BLUE-PURPLE SIDEBAR THEME
+st.markdown("""
+<style>
+/* Sidebar background */
+[data-testid="stSidebar"] {
+    background: linear-gradient(
+        180deg,
+        #EEF2FF 0%,
+        #EDE9FE 55%,
+        #F5F3FF 100%
+    );
+    border-right: 1px solid #DDD6FE;
+}
+
+/* Sidebar heading */
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {
+    color: #3730A3;
+    font-weight: 700;
+}
+
+/* Sidebar text */
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] p {
+    color: #373151;
+}
+
+/* Navigation spacing */
+[data-testid="stSidebar"] [role="radiogroup"] {
+    gap: 7px;
+}
+
+/* Navigation hover effect */
+[data-testid="stSidebar"] [role="radiogroup"] label {
+    border-radius: 10px;
+    padding: 7px 9px;
+    transition: background-color 0.2s ease;
+}
+
+/* Selected navigation item */
+[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {
+    background: linear-gradient(90deg, #4F46E5, #7C3AED);
+}
+
+/* Selected item text */
+[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) p {
+    color: white !important;
+}
+
+/* Sidebar divider */
+[data-testid="stSidebar"] hr {
+    border-color: #C4B5FD;
+}
+
+/* Modern Button Styling */
+.stButton > button {
+    border: 1px solid #C7D2FE;
+    border-radius: 12px;
+    padding: 10px 16px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.stButton > button:hover {
+    border-color: #4F46E5;
+    color: #4338CA;
+    background-color: #EEF2FF;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 14px rgba(79, 70, 229, 0.12);
+}
+
+/* Dashboard Layout Polish */
+.welcome-banner {
+    margin-bottom: 28px;
+}
+
+.home-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 155px;
+    margin-bottom: 16px;
+}
+
+.section-heading {
+    line-height: 1.4;
+}
+
+.section-subtitle {
+    line-height: 1.6;
+}
+
+</style>
+""", unsafe_allow_html=True)
 
 
 def create_academic_pdf(submissions, exams):
@@ -115,11 +406,19 @@ def create_academic_pdf(submissions, exams):
 # Initialize database
 initialize_database()
 initialize_academic_tables()
+initialize_timetable_table()
 
 st.title("🎓 AI-Powered Student Assistant")
 st.caption("Your Smart Academic Support Platform")
 
+
 # Sidebar menu
+if "selected_page" not in st.session_state:
+    st.session_state["selected_page"] = "Home"
+
+def go_to_page(target):
+    st.session_state["selected_page"] = target
+
 with st.sidebar:
     st.header("Student Menu")
     page = st.radio(
@@ -127,29 +426,202 @@ with st.sidebar:
         [
             "Home",
             "AI Assistant",
+            "AI Quiz Generator",
             "Chat History",
             "Assignments & Exams",
             "Study Resources",
+            "Notes Summarizer",
             "Academic Planner",
+            "Smart Timetable",
             "About",
         ],
+        key="selected_page",
     )
+
 
 # HOME PAGE
 if page == "Home":
-    st.subheader("Welcome to Student Assistant!")
 
+    # Blue-Purple Dashboard Styling
+    st.markdown("""
+    <style>
+    .welcome-banner {
+        background: linear-gradient(120deg, #312E81, #4F46E5, #7C3AED);
+        padding: 30px;
+        border-radius: 20px;
+        color: white;
+        margin-bottom: 25px;
+        box-shadow: 0 8px 24px rgba(79, 70, 229, 0.20);
+    }
+    
+.welcome-banner h1 {
+    color: white;
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.3;
+    margin: 0 0 12px 0;
+    letter-spacing: -0.5px;
+}
+
+    
+.welcome-banner p {
+    color: #E0E7FF;
+    font-size: 16px;
+    line-height: 1.7;
+    margin: 0;
+}
+
+    .home-card {
+        padding: 22px;
+        border-radius: 16px;
+        color: white;
+        min-height: 145px;
+        margin-bottom: 12px;
+    }
+    .home-card .emoji {
+        font-size: 28px;
+    }
+    .home-card .label {
+        font-size: 14px;
+        margin-top: 12px;
+        opacity: 0.95;
+    }
+    .home-card .value {
+        font-size: 25px;
+        font-weight: bold;
+        margin-top: 5px;
+    }
+    .home-blue {
+        background: linear-gradient(135deg, #2563EB, #4F46E5);
+    }
+    .home-purple {
+        background: linear-gradient(135deg, #7C3AED, #6D28D9);
+    }
+    .home-cyan {
+        background: linear-gradient(135deg, #0891B2, #2563EB);
+    }
+    
+    
+    /* Professional Dashboard Improvements */
+    .welcome-banner {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+
+    
+.home-card {
+    padding: 24px;
+    border-radius: 18px;
+    color: white;
+    min-height: 155px;
+    margin-bottom: 14px;
+    box-shadow: 0 8px 22px rgba(49, 46, 129, 0.16);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+    .home-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 26px rgba(49, 46, 129, 0.24);
+    }
+
+    .section-heading {
+        color: #4F46E5;
+        font-size: 24px;
+        font-weight: 700;
+        margin-top: 24px;
+        margin-bottom: 5px;
+    }
+
+    .section-subtitle {
+        color: #64748B;
+        font-size: 14px;
+        margin-bottom: 18px;
+    }
+
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Welcome Banner
+    st.markdown("""
+    <div class="welcome-banner">
+        <h1>🎓 Welcome to Student Assistant!</h1>
+        <p>Your smart academic companion — learn, plan and achieve more.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Overview Cards
     col1, col2, col3 = st.columns(3)
-    col1.metric("Platform", "Student AI")
-    col2.metric("Database", "SQLite")
-    col3.metric("AI Assistant", "Available")
 
-    st.write(
-        "Ask academic questions, save conversations, "
-        "manage assignments, and explore study resources."
+    with col1:
+        st.markdown("""
+        <div class="home-card home-blue">
+            <div class="emoji">🚀</div>
+            <div class="label">Platform</div>
+            <div class="value">Student AI</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown("""
+        <div class="home-card home-purple">
+            <div class="emoji">🗄️</div>
+            <div class="label">Database</div>
+            <div class="value">SQLite</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown("""
+        <div class="home-card home-cyan">
+            <div class="emoji">🤖</div>
+            <div class="label">AI Assistant</div>
+            <div class="value">Available</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Description
+    st.markdown("""
+    <div style="
+        background: rgba(99, 102, 241, 0.07);
+        border: 1px solid rgba(99, 102, 241, 0.20);
+        border-radius: 14px;
+        padding: 20px;
+        margin-top: 12px;
+    ">
+        <h3 style="margin-top:0; color:#6366F1;">
+            ✨ Everything you need in one place
+        </h3>
+        <p>
+            Ask academic questions, save conversations, manage assignments,
+            explore study resources and plan your studies efficiently.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # QUICK ACTIONS
+    
+    st.markdown(
+        '<div class="section-heading">⚡ Quick Actions</div>'
+        '<div class="section-subtitle">'
+        'Choose a feature to get started.'
+        '</div>',
+        unsafe_allow_html=True
     )
 
+    action1, action2, action3 = st.columns(3, gap="medium")
 
+    with action1:
+        st.button("🤖 AI Assistant", use_container_width=True)
+        st.button("📝 Assignments & Exams", use_container_width=True)
+
+    with action2:
+        st.button("📚 Study Resources", use_container_width=True)
+        st.button("📅 Smart Timetable", use_container_width=True)
+
+    with action3:
+        st.button("🧠 AI Quiz Generator", use_container_width=True)
+        st.button("📖 Notes Summarizer", use_container_width=True)
 
 # AI ASSISTANT PAGE
 elif page == "AI Assistant":
@@ -159,84 +631,86 @@ elif page == "AI Assistant":
         "programming, or your studies."
     )
 
+    language = st.selectbox(
+        "Select Answer Language",
+        ["मराठी (Marathi)", "English", "हिंदी (Hindi)"]
+    )
+
     def get_local_answer(question):
-        q = question.lower().strip()
+        import requests
 
-        if "numpy" in q:
-            return (
-                "NumPy is a Python library used for numerical "
-                "calculations and working with arrays. "
-                "It is useful for scientific computing and data analysis."
-            )
 
-        elif "pandas" in q:
-            return (
-                "Pandas is a Python library used to organize, "
-                "analyze, and manipulate data. It provides "
-                "DataFrames and Series."
-            )
+        
+        prompt = f"""
+You are a helpful teacher for Indian college students.
 
-        elif "python" in q:
-            return (
-                "Python is a popular programming language. "
-                "It is used in web development, automation, "
-                "data analysis, AI, and machine learning."
-            )
+IMPORTANT LANGUAGE RULE:
+The selected answer language is: {language}
 
-        elif "artificial intelligence" in q or "what is ai" in q:
-            return (
-                "Artificial Intelligence (AI) is a technology "
-                "that enables computers to perform tasks that "
-                "normally require human intelligence."
-            )
+If the selected language is Marathi:
+- Write the entire answer in natural Marathi using Devanagari script.
+- Explain technical terms in simple Marathi.
+- You may keep technical words like Python, coding, and programming in English.
+- Do not write Hindi or Urdu sentences.
+- Give a correct answer to the question.
 
-        elif "machine learning" in q:
-            return (
-                "Machine Learning is a branch of AI in which "
-                "computers learn patterns from data to make "
-                "predictions or decisions."
-            )
+If the selected language is Hindi:
+- Write the entire answer in natural Hindi using Devanagari script.
 
-        elif "nlp" in q or "natural language processing" in q:
-            return (
-                "NLP stands for Natural Language Processing. "
-                "It helps computers understand and process "
-                "human language."
-            )
+If the selected language is English:
+- Write the entire answer in clear, simple English.
 
-        elif "chatbot" in q:
-            return (
-                "A chatbot is a computer program that interacts "
-                "with users through text or speech. This project "
-                "uses predefined answers for common questions."
-            )
 
-        elif "project" in q or "student assistant" in q:
-            return (
-                "AI-Powered Student Assistant is an academic "
-                "support project that helps students find basic "
-                "study information through a chatbot interface."
-            )
+Keep the answer accurate, clear, and easy for a college student to understand.
 
-        elif "hello" in q or "hi" == q or "hey" in q:
-            return (
-                "Hello! Welcome to AI-Powered Student Assistant. "
-                "Ask me about Python, NumPy, Pandas, AI, or NLP."
-            )
+For programming questions:
+- Explain the concept in simple language.
+- Give one complete, correct Python code example.
+- Explain the code briefly.
+- Show the expected output.
+- Never stop in the middle of a sentence or code example.
+- Keep the answer concise but complete.
+- Use the selected answer language consistently.
 
-        elif "help" in q:
-            return (
-                "I can answer basic questions about Python, "
-                "NumPy, Pandas, Artificial Intelligence, "
-                "Machine Learning, NLP, and this student project."
-            )
+Student question: {question}
 
-        else:
-            return (
-                "Sorry, I don't have a predefined answer for "
-                "that question yet. Try asking about Python, "
-                "NumPy, Pandas, AI, Machine Learning, or NLP."
+
+Answer in {language}:
+"""
+
+
+        try:
+            response = requests.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": "llama3.2:latest",
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {
+    "num_predict": 250,
+    "temperature": 0.2,
+    "repeat_penalty": 1.2,
+    "repeat_last_n": 64
+}
+                },
+                timeout=300
             )
+            response.raise_for_status()
+
+            answer = response.json().get(
+                "response", ""
+            ).strip()
+
+            return answer or "No answer generated. Please try again."
+
+        except requests.exceptions.ConnectionError:
+            return "Ollama is not running. Please start Ollama."
+
+        except requests.exceptions.Timeout:
+            return "AI response timed out. Please try again."
+
+        except Exception as e:
+            return f"AI error: {e}"
 
     # Display saved conversations
     for row in reversed(get_chat_history()):
@@ -246,20 +720,243 @@ elif page == "AI Assistant":
         with st.chat_message("assistant"):
             st.write(row[2])
 
+    
     # Ask a new question
     question = st.chat_input("Ask your academic question...")
+
+    # Quick Questions
+    st.markdown("### 💡 Quick Questions")
+
+    col1, col2 = st.columns(2)
+
+    if col1.button("🐍 Python Basics", key="quick_python_basics"):
+        st.session_state["suggested_question"] = (
+            "Explain Python basics with a simple example."
+        )
+
+    if col2.button("🧠 What is AI?", key="quick_what_is_ai"):
+        st.session_state["suggested_question"] = (
+            "Explain Artificial Intelligence in simple words."
+        )
+
+    if col1.button("📊 Explain Pandas", key="quick_explain_pandas"):
+        st.session_state["suggested_question"] = (
+            "What is Pandas in Python? Give an example."
+        )
+
+    if col2.button("🎓 Study Tips", key="quick_study_tips"):
+        st.session_state["suggested_question"] = (
+            "Give me useful study tips for college exams."
+        )
+
+    # Get the selected quick question
+    suggested_question = st.session_state.pop(
+        "suggested_question", None
+    )
+
+    if suggested_question:
+        question = suggested_question
+
+    # Process the question
+    if question:
+        with st.chat_message("user"):
+            st.write(question)
+
+        with st.chat_message("assistant"):
+            with st.spinner("🤖 AI is thinking... Please wait"):
+                answer = get_local_answer(question)
+
+            if answer.startswith("AI error:"):
+                st.error(answer)
+            elif answer in [
+                "Ollama is not running. Please start Ollama.",
+                "AI response timed out. Please try again.",
+            ]:
+                st.warning(answer)
+            else:
+                st.markdown(answer)
+
+        save_chat(question, answer)
+
 
     if question:
         with st.chat_message("user"):
             st.write(question)
 
-        answer = get_local_answer(question)
-
         with st.chat_message("assistant"):
-            st.write(answer)
+            with st.spinner("🤖 AI is thinking... Please wait"):
+                answer = get_local_answer(question)
+
+            if answer.startswith("AI error:"):
+                st.error(answer)
+            elif answer in [
+                "Ollama is not running. Please start Ollama.",
+                "AI response timed out. Please try again.",
+            ]:
+                st.warning(answer)
+            else:
+                st.markdown(answer)
 
         save_chat(question, answer)
-        st.success("Chat saved successfully!")
+
+# AI QUIZ GENERATOR PAGE
+elif page == "AI Quiz Generator":
+    import json
+    import requests
+
+    st.subheader("📝 AI Quiz Generator")
+    st.write("Generate a multiple-choice quiz for your studies.")
+
+    topic = st.text_input(
+        "Enter a topic",
+        placeholder="Example: Python Basics"
+    )
+
+    quiz_language = st.selectbox(
+        "Quiz language",
+        ["English", "मराठी (Marathi)", "हिंदी (Hindi)"]
+    )
+
+    difficulty = st.selectbox(
+        "Difficulty",
+        ["Easy", "Medium", "Hard"]
+    )
+
+    question_count = st.slider(
+        "Number of questions",
+        min_value=3,
+        max_value=10,
+        value=5
+    )
+
+    if st.button("Generate Quiz", key="generate_ai_quiz"):
+        if not topic.strip():
+            st.warning("Please enter a topic.")
+        else:
+            language_rule = {
+                "English": "Write in simple English.",
+                "मराठी (Marathi)": (
+                    "Write in simple Marathi using Devanagari script."
+                ),
+                "हिंदी (Hindi)": (
+                    "Write in simple Hindi using Devanagari script."
+                ),
+            }[quiz_language]
+
+            prompt = f"""
+Create exactly {question_count} educational multiple-choice questions.
+Topic: {topic}
+Difficulty: {difficulty}
+Language: {language_rule}
+
+Return only valid JSON in this format:
+{{
+  "questions": [
+    {{
+      "question": "Question text",
+      "options": ["A", "B", "C", "D"],
+      "answer": "Exact correct option",
+      "explanation": "Short explanation"
+    }}
+  ]
+}}
+
+Every question must have four options.
+The answer must exactly match one option.
+Do not repeat questions.
+"""
+
+            try:
+                with st.spinner("Generating quiz..."):
+                    response = requests.post(
+                        "http://localhost:11434/api/generate",
+                        json={
+                            "model": "llama3.2:latest",
+                            "prompt": prompt,
+                            "stream": False,
+                            "format": "json",
+                            "options": {
+                                "temperature": 0.2,
+                                "num_predict": 1800
+                            }
+                        },
+                        timeout=300
+                    )
+
+                    response.raise_for_status()
+                    quiz_data = json.loads(
+                        response.json().get("response", "")
+                    )
+                    questions = quiz_data.get("questions", [])
+
+                    if not questions:
+                        st.error("No questions generated. Please try again.")
+                    else:
+                        st.session_state["ai_quiz_questions"] = questions
+                        st.session_state["ai_quiz_topic"] = topic
+                        st.session_state.pop("ai_quiz_score", None)
+
+            except requests.exceptions.ConnectionError:
+                st.error("Ollama is not running. Please start Ollama.")
+            except requests.exceptions.Timeout:
+                st.error("The AI response timed out. Please try again.")
+            except (json.JSONDecodeError, ValueError):
+                st.error("Invalid quiz format. Please generate the quiz again.")
+            except Exception as e:
+                st.error(f"Quiz generation failed: {e}")
+
+    # Display generated quiz
+    questions = st.session_state.get("ai_quiz_questions", [])
+
+    if questions:
+        st.divider()
+        st.subheader(
+            f"Quiz: {st.session_state.get('ai_quiz_topic', '')}"
+        )
+
+        with st.form("ai_quiz_answer_form"):
+            answers = []
+
+            for i, item in enumerate(questions):
+                st.markdown(f"**Q{i + 1}. {item.get('question', '')}**")
+                options = item.get("options", [])
+
+                if len(options) == 4:
+                    selected = st.radio(
+                        "Select an answer",
+                        options,
+                        index=None,
+                        key=f"ai_quiz_answer_{i}",
+                        label_visibility="collapsed"
+                    )
+                    answers.append(selected)
+                else:
+                    st.warning(f"Question {i + 1} has invalid options.")
+                    answers.append(None)
+
+            submitted = st.form_submit_button("Submit Answers")
+
+        if submitted:
+            score = sum(
+                1 for item, selected in zip(questions, answers)
+                if selected is not None
+                and selected == item.get("answer")
+            )
+            st.session_state["ai_quiz_score"] = score
+
+        if "ai_quiz_score" in st.session_state:
+            score = st.session_state["ai_quiz_score"]
+            st.success(f"Your Score: {score} / {len(questions)}")
+
+            for i, item in enumerate(questions):
+                st.markdown(f"**Q{i + 1}. Correct Answer:**")
+                st.write(item.get("answer", "Not available"))
+                st.write(
+                    "Explanation: "
+                    + item.get("explanation", "No explanation available.")
+                )
+
+
 
 # CHAT HISTORY PAGE
 elif page == "Chat History":
@@ -350,6 +1047,164 @@ elif page == "Assignments & Exams":
         )
     else:
         st.info("No assignments or exams saved yet.")
+
+
+# NOTES UPLOAD AND AI SUMMARIZER PAGE
+elif page == "Notes Summarizer":
+    import requests
+    from pypdf import PdfReader
+    from io import BytesIO
+
+    st.subheader("📚 Notes Upload & AI Summarizer")
+    st.write(
+        "Upload your PDF study notes to generate a summary "
+        "and important revision points."
+    )
+
+    uploaded_file = st.file_uploader(
+        "Upload PDF Notes",
+        type=["pdf"],
+        key="notes_pdf_upload"
+    )
+
+    summary_language = st.selectbox(
+        "Select Summary Language",
+        ["English", "मराठी (Marathi)", "हिंदी (Hindi)"],
+        key="notes_summary_language"
+    )
+
+    if uploaded_file is not None:
+        if uploaded_file.size > 10 * 1024 * 1024:
+            st.error("Please upload a PDF smaller than 10 MB.")
+
+        else:
+            if st.button("✨ Generate Summary", key="generate_notes_summary"):
+                try:
+                    with st.spinner("Reading your PDF notes..."):
+                        pdf_reader = PdfReader(
+                            BytesIO(uploaded_file.getvalue())
+                        )
+
+                        if pdf_reader.is_encrypted:
+                            st.error(
+                                "This PDF is password-protected. "
+                                "Please upload an unlocked PDF."
+                            )
+                        else:
+                            pages_text = []
+
+                            for pdf_page in pdf_reader.pages:
+                                pages_text.append(
+                                    pdf_page.extract_text() or ""
+                                )
+
+                            document_text = "\n".join(pages_text).strip()
+
+                            if not document_text:
+                                st.error(
+                                    "No readable text found. "
+                                    "Scanned PDFs may need OCR first."
+                                )
+
+                            elif len(document_text) > 20000:
+                                st.warning(
+                                    "Only the first 20,000 characters "
+                                    "will be summarized."
+                                )
+                                document_text = document_text[:20000]
+
+                            if document_text:
+                                language_rule = {
+                                    "English": "Write in clear English.",
+                                    "मराठी (Marathi)": (
+                                        "Write in simple Marathi using "
+                                        "Devanagari script."
+                                    ),
+                                    "हिंदी (Hindi)": (
+                                        "Write in simple Hindi using "
+                                        "Devanagari script."
+                                    ),
+                                }[summary_language]
+
+                                prompt = f"""
+You are a helpful study assistant.
+
+Summarize the following student notes.
+{language_rule}
+
+Use these headings:
+1. Short Summary
+2. Important Points
+3. Key Terms
+4. Quick Revision
+
+Use only information supported by the notes.
+Do not invent facts. Keep the language simple.
+
+PDF NOTES:
+{document_text}
+
+SUMMARY:
+"""
+
+                                with st.spinner("AI is summarizing your notes..."):
+                                    response = requests.post(
+                                        "http://localhost:11434/api/generate",
+                                        json={
+                                            "model": "llama3.2:latest",
+                                            "prompt": prompt,
+                                            "stream": False,
+                                            "options": {
+                                                "temperature": 0.2,
+                                                "num_predict": 1000,
+                                                "repeat_penalty": 1.2
+                                            }
+                                        },
+                                        timeout=300
+                                    )
+
+                                    response.raise_for_status()
+                                    summary = response.json().get(
+                                        "response", ""
+                                    ).strip()
+
+                                if summary:
+                                    st.session_state["notes_summary"] = summary
+                                    st.session_state["notes_filename"] = (
+                                        uploaded_file.name
+                                    )
+                                else:
+                                    st.error(
+                                        "No summary generated. Please try again."
+                                    )
+
+                except requests.exceptions.ConnectionError:
+                    st.error(
+                        "Ollama is not running. Please start Ollama."
+                    )
+                except requests.exceptions.Timeout:
+                    st.error(
+                        "The AI took too long. Please try again."
+                    )
+                except Exception as e:
+                    st.error(f"Could not process the PDF: {e}")
+
+    if st.session_state.get("notes_summary"):
+        st.divider()
+        st.subheader("📖 Your Study Summary")
+        st.caption(
+            "File: "
+            + st.session_state.get("notes_filename", "Uploaded PDF")
+        )
+        st.markdown(st.session_state["notes_summary"])
+
+        st.download_button(
+            "⬇️ Download Summary",
+            data=st.session_state["notes_summary"],
+            file_name="study_summary.txt",
+            mime="text/plain",
+            key="download_notes_summary"
+        )
 
 
 # STUDY RESOURCES PAGE
@@ -520,49 +1375,104 @@ elif page == "Academic Planner":
 
     st.divider()           
     
-    # ACADEMIC DASHBOARD CARDS
-    st.markdown("### 📊 Academic Dashboard")
+    
+    # Modern Blue-Purple Academic Dashboard Cards
+    st.markdown("""
+    <style>
+    .academic-card {
+        padding: 20px;
+        border-radius: 16px;
+        color: white;
+        min-height: 125px;
+        margin-bottom: 14px;
+        box-shadow: 0 5px 15px rgba(50,50,100,0.15);
+    }
+    .academic-label {
+        font-size: 14px;
+        opacity: 0.95;
+    }
+    .academic-value {
+        font-size: 32px;
+        font-weight: bold;
+        margin-top: 10px;
+    }
+    .academic-blue {
+        background: linear-gradient(135deg,#2563EB,#4F46E5);
+    }
+    .academic-purple {
+        background: linear-gradient(135deg,#7C3AED,#6D28D9);
+    }
+    .academic-cyan {
+        background: linear-gradient(135deg,#0891B2,#2563EB);
+    }
+    .academic-pink {
+        background: linear-gradient(135deg,#9333EA,#DB2777);
+    }
+    .academic-indigo {
+        background: linear-gradient(135deg,#4338CA,#7C3AED);
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-    dashboard_submissions = get_submissions()
-    dashboard_exams = get_exams()
+    st.markdown("""
+    <h2 style="color:#6366F1;">📊 Academic Overview</h2>
+    <p style="color:#64748B;">
+        Track your academic progress in one place.
+    </p>
+    """, unsafe_allow_html=True)
 
-    total_assignments = len(dashboard_submissions)
+    col1, col2, col3 = st.columns(3)
 
-    submitted_assignments = sum(
-        1 for item in dashboard_submissions
-        if item[4] == "Submitted"
-    )
+    with col1:
+        st.markdown(f"""
+        <div class="academic-card academic-blue">
+            <div style="font-size:25px;">📝</div>
+            <div class="academic-label">Total Assignments</div>
+            <div class="academic-value">{total_assignments}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    pending_assignments = sum(
-        1 for item in dashboard_submissions
-        if item[4] != "Submitted"
-    )
+    with col2:
+        st.markdown(f"""
+        <div class="academic-card academic-purple">
+            <div style="font-size:25px;">✅</div>
+            <div class="academic-label">Submitted</div>
+            <div class="academic-value">{submitted_assignments}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    today = date.today()
+    with col3:
+        st.markdown(f"""
+        <div class="academic-card academic-cyan">
+            <div style="font-size:25px;">⏳</div>
+            <div class="academic-label">Pending</div>
+            <div class="academic-value">{pending_assignments}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    upcoming_deadlines = 0
+    col4, col5 = st.columns(2)
 
-    for item in dashboard_submissions:
-        task_id, title, subject, due, status = item
+    with col4:
+        st.markdown(f"""
+        <div class="academic-card academic-pink">
+            <div style="font-size:25px;">📚</div>
+            <div class="academic-label">Total Exams</div>
+            <div class="academic-value">{len(dashboard_exams)}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        if status != "Submitted":
-            try:
-                if date.fromisoformat(due) >= today:
-                    upcoming_deadlines += 1
-            except ValueError:
-                pass
-
-    col1, col2, col3, col4, col5 = st.columns(5)
-
-    col1.metric("📝 Total Assignments", total_assignments)
-    col2.metric("✅ Submitted", submitted_assignments)
-    col3.metric("⏳ Pending", pending_assignments)
-    col4.metric("📚 Total Exams", len(dashboard_exams))
-    col5.metric("📅 Upcoming Deadlines", upcoming_deadlines)
+    with col5:
+        st.markdown(f"""
+        <div class="academic-card academic-indigo">
+            <div style="font-size:25px;">📅</div>
+            <div class="academic-label">Upcoming Deadlines</div>
+            <div class="academic-value">{upcoming_deadlines}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
     st.divider()
 
-    
+
     # SMART DEADLINE REMINDERS
     st.markdown("### 🔔 Smart Deadline Reminders")
 
@@ -934,6 +1844,268 @@ elif page == "Academic Planner":
             file_name="Academic_Planner_Report.pdf",
             mime="application/pdf",
         )    
+
+     
+
+# SMART TIMETABLE PAGE
+elif page == "Smart Timetable":
+    import pandas as pd
+    from datetime import datetime
+
+    st.title("📅 Smart Timetable")
+
+    st_autorefresh(
+        interval=30 * 1000,
+        key="student_assistant_reminder_refresh"
+    )
+
+    st.write("Create and manage your weekly class timetable.")
+
+
+    with st.form("timetable_form"):
+        subject = st.text_input("Subject Name")
+        day = st.selectbox(
+            "Day",
+            ["Monday", "Tuesday", "Wednesday", "Thursday",
+             "Friday", "Saturday", "Sunday"]
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            start_time = st.time_input(
+                "Start Time",
+                value=datetime.strptime("09:00", "%H:%M").time()
+            )
+
+        with col2:
+            end_time = st.time_input(
+                "End Time",
+                value=datetime.strptime("10:00", "%H:%M").time()
+            )
+
+        classroom = st.text_input("Classroom / Lab")
+
+        submitted = st.form_submit_button("➕ Add Lecture")
+
+    if submitted:
+        if not subject.strip():
+            st.warning("OSY.")
+        elif end_time <= start_time:
+            st.error("End time must be after start time.")
+        else:
+            existing = get_timetable()
+
+            overlap = any(
+                item[2] == day
+                and start_time.strftime("%H:%M") < item[4]
+                and end_time.strftime("%H:%M") > item[3]
+                for item in existing
+            )
+
+            if overlap:
+                st.error("⚠️ This lecture overlaps with an existing lecture.")
+            else:
+                save_timetable(
+                    subject.strip(),
+                    day,
+                    start_time.strftime("%H:%M"),
+                    end_time.strftime("%H:%M"),
+                    classroom.strip()
+                )
+                st.success("Lecture added successfully!")
+                st.rerun()
+
+    st.subheader("📚 Weekly Class Schedule")
+
+    timetable = get_timetable()
+
+    if timetable:
+        df = pd.DataFrame(
+            timetable,
+            columns=[
+                "ID", "Subject", "Day",
+                "Start Time", "End Time", "Classroom"
+            ]
+        )
+
+        
+        df["Start Time"] = pd.to_datetime(
+            df["Start Time"], format="%H:%M"
+        ).dt.strftime("%I:%M %p")
+
+        df["End Time"] = pd.to_datetime(
+            df["End Time"], format="%H:%M"
+        ).dt.strftime("%I:%M %p")
+
+        st.dataframe(
+            df.drop(columns=["ID"]),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        csv_data = df.drop(columns=["ID"]).to_csv(index=False).encode("utf-8")
+
+        st.download_button(
+            "⬇️ Download Timetable CSV",
+            data=csv_data,
+            file_name="smart_timetable.csv",
+            mime="text/csv"
+        )
+
+        lecture_id = st.selectbox(
+            "Select lecture to delete",
+            df["ID"].tolist(),
+            format_func=lambda x: (
+                f"{df.loc[df['ID'] == x, 'Subject'].iloc[0]} - "
+                f"{df.loc[df['ID'] == x, 'Day'].iloc[0]}"
+            )
+        )
+
+        if st.button("🗑️ Delete Selected Lecture"):
+            delete_timetable_entry(lecture_id)
+            st.success("Lecture deleted.")
+            st.rerun()
+    else:
+        st.info("No lectures added yet. Add your first lecture above.")
+
+
+    # LECTURE AND EXAM REMINDERS
+    from datetime import date, timedelta
+
+    st.divider()
+    st.subheader("🔔 Lecture & Exam Reminders")
+
+    
+    # Today's lectures
+    st.markdown("### 📚 Today's Lectures")
+
+    now = datetime.now()
+    today_date = date.today()
+    today_name = now.strftime("%A")
+    current_time = now.strftime("%H:%M")
+
+    all_lectures = get_timetable()
+    browser_reminders = []
+
+    today_lectures = [
+        lecture for lecture in all_lectures
+        if lecture[2] == today_name
+    ]
+
+    if today_lectures:
+        for lecture in today_lectures:
+            start_dt = datetime.combine(
+                today_date,
+                datetime.strptime(lecture[3], "%H:%M").time()
+            )
+
+            end_dt = datetime.combine(
+                today_date,
+                datetime.strptime(lecture[4], "%H:%M").time()
+            )
+
+            seconds_left = (start_dt - now).total_seconds()
+
+            st.write(
+                f"📘 **{lecture[1]}** | "
+                f"{start_dt.strftime('%I:%M %p')} – "
+                f"{end_dt.strftime('%I:%M %p')} | "
+                f"Room: {lecture[5] or 'Not specified'}"
+            )
+
+            if 0 < seconds_left <= 15 * 60:
+                minutes_left = max(1, int(seconds_left // 60))
+
+                st.warning(
+                    f"🔔 Reminder: {lecture[1]} starts in "
+                    f"{minutes_left} minute(s)!"
+                )
+
+                browser_reminders.append({
+                    "id": f"lecture-{lecture[0]}-{today_date.isoformat()}",
+                    "title": "Lecture Reminder",
+                    "body": f"{lecture[1]} starts in "
+                            f"{minutes_left} minute(s)."
+                })
+
+            elif start_dt <= now < end_dt:
+                st.success(f"📖 {lecture[1]} lecture is ongoing.")
+
+    else:
+        st.info("No lectures scheduled for today.")
+
+   
+    # Upcoming exams
+    st.markdown("### 📝 Upcoming Exams")
+
+    today_date = date.today()
+    next_week = today_date + timedelta(days=7)
+    exams = get_exams()
+    found_exam = False
+
+    for exam in exams:
+        try:
+            exam_date = date.fromisoformat(str(exam[2]))
+
+            # Exam reminder: 3 days before
+            if (exam_date - today_date).days == 3:
+                browser_reminders.append({
+                    "id": f"exam-{exam[0]}-{exam_date.isoformat()}",
+                    "title": "Exam Reminder",
+                    "body": f"{exam[1]} exam is in 3 days."
+                })
+
+            if today_date <= exam_date <= next_week:
+                found_exam = True
+                days_left = (exam_date - today_date).days
+
+                if days_left == 0:
+                    message = "⚠️ Exam is today!"
+                elif days_left == 1:
+                    message = "⏰ Exam is tomorrow!"
+                else:
+                    message = f"📅 Exam in {days_left} days."
+
+                st.warning(
+                    f"**{exam[1]}** — "
+                    f"{exam_date.strftime('%d-%m-%Y')} at {exam[3]} "
+                    f"| Venue: {exam[4] or 'Not specified'}\n\n"
+                    f"{message}"
+                )
+
+        except (ValueError, TypeError):
+            st.caption(f"Invalid exam date for {exam[1]}.")
+
+
+
+
+    if not found_exam:
+        st.info("No exams scheduled in the next 7 days.")
+
+    send_browser_notifications(browser_reminders)
+
+
+    st.divider()
+    st.subheader("📄 Download PDF Report")
+
+    try:
+        pdf_data = create_timetable_exam_pdf()
+
+        st.download_button(
+            label="⬇️ Download Timetable & Exams PDF",
+            data=pdf_data,
+            file_name="Student_Timetable_Exam_Report.pdf",
+            mime="application/pdf",
+            key="download_timetable_exam_pdf",
+        )
+
+        st.caption(
+            "Your PDF contains the weekly timetable and exam schedule."
+        )
+
+    except Exception as e:
+        st.error(f"Could not generate PDF: {e}")
 
 # ABOUT PAGE
 elif page == "About":
