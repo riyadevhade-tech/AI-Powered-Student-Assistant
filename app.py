@@ -1,5 +1,6 @@
-
+import os
 import streamlit as st
+import sqlite3
 import streamlit.components.v1 as components
 import json
 from io import BytesIO
@@ -659,6 +660,21 @@ if page == "Home":
             key="home_notes",
         )
 
+# CHAT HISTORY PAGE
+elif page == "Chat History":
+    st.subheader("💬 Chat History")
+
+    history = get_chat_history()
+
+    if history:
+        for row in reversed(history):
+            with st.chat_message("user"):
+                st.write(row[1])
+
+            with st.chat_message("assistant"):
+                st.markdown(row[2])
+    else:
+        st.info("No chat history available yet.")
 
 # AI ASSISTANT PAGE
 elif page == "AI Assistant":
@@ -740,26 +756,194 @@ elif page == "AI Assistant":
         return answers[topic].get(language, answers[topic]["English"])
 
 
-    # Display saved conversations
-    for row in reversed(get_chat_history()):
-        with st.chat_message("user"):
-            st.write(row[1])
-        with st.chat_message("assistant"):
-            st.write(row[2])
+# ASSIGNMENTS & EXAMS PAGE
+elif page == "Assignments & Exams":
+    st.title("📝 Assignments & Exams")
 
-    question = st.chat_input("Ask your academic question...")
+    st.subheader("📚 Add Assignment")
+    assignment = st.text_input("Assignment Name")
+    subject = st.text_input("Subject")
+    due_date = st.date_input("Assignment Due Date")
 
-    if question:
-        with st.chat_message("user"):
-            st.write(question)
+    if st.button("Add Assignment"):
+        if assignment.strip() and subject.strip():
+            st.success(
+                f"Assignment: {assignment}\n\n"
+                f"Subject: {subject}\n\n"
+                f"Due Date: {due_date}"
+            )
+        else:
+            st.warning("Enter assignment name and subject.")
 
-        answer = get_local_answer(question)
+    st.divider()
 
-        with st.chat_message("assistant"):
-            st.markdown(answer)
+    st.subheader("📅 Exam Details")
+    exam_subject = st.text_input("Exam Subject")
+    exam_date = st.date_input("Exam Date", key="exam_date")
 
-        save_chat(question, answer)
+    if st.button("Show Exam Details"):
+        if exam_subject.strip():
+            st.info(f"{exam_subject} — {exam_date}")
+        else:
+            st.warning("Enter the exam subject.")
 
+
+# NOTES SUMMARIZER PAGE
+
+elif page == "Notes Summarizer":
+    import re
+    from collections import Counter
+    from PyPDF2 import PdfReader
+
+    st.title("📄 PDF Notes Summarizer")
+    st.write("Upload your study PDF and generate a short summary.")
+
+    st.divider()
+
+    uploaded_pdf = st.file_uploader(
+        "📤 Upload PDF Notes",
+        type=["pdf"],
+        key="notes_pdf_upload"
+    )
+
+    summary_length = st.select_slider(
+        "Summary Length",
+        options=["Short", "Medium", "Long"],
+        value="Medium"
+    )
+
+    if uploaded_pdf is not None:
+        if st.button("✨ Generate Summary", use_container_width=True):
+            try:
+                reader = PdfReader(uploaded_pdf)
+
+                if reader.is_encrypted:
+                    st.error("This PDF is password-protected.")
+                else:
+                    pages_text = []
+
+                    for pdf_page in reader.pages:
+                        pages_text.append(
+                            pdf_page.extract_text() or ""
+                        )
+
+                    full_text = "\n".join(pages_text).strip()
+
+                    if not full_text:
+                        st.warning(
+                            "No readable text found. "
+                            "This may be a scanned PDF."
+                        )
+                    else:
+                        sentences = re.split(
+                            r'(?<=[.!?])\s+',
+                            re.sub(r'\s+', ' ', full_text)
+                        )
+                        sentences = [
+                            s.strip() for s in sentences
+                            if len(s.split()) >= 4
+                        ]
+
+                        if not sentences:
+                            st.info(full_text[:1500])
+                        else:
+                            stop_words = set("""
+                            the a an is are was were of to in on
+                            for and or with this that it as by be
+                            from at has have had their its
+                            """.split())
+
+                            words = re.findall(
+                                r'\b[a-zA-Z]{3,}\b',
+                                full_text.lower()
+                            )
+                            frequencies = Counter(
+                                w for w in words
+                                if w not in stop_words
+                            )
+
+                            scored = []
+                            for index, sentence in enumerate(sentences):
+                                sentence_words = re.findall(
+                                    r'\b[a-zA-Z]{3,}\b',
+                                    sentence.lower()
+                                )
+                                score = sum(
+                                    frequencies[w]
+                                    for w in sentence_words
+                                ) / max(len(sentence_words), 1)
+
+                                scored.append((score, index, sentence))
+
+                            limits = {
+                                "Short": 3,
+                                "Medium": 5,
+                                "Long": 8
+                            }
+                            chosen = sorted(
+                                scored,
+                                key=lambda item: item[0],
+                                reverse=True
+                            )[:limits[summary_length]]
+
+                            chosen.sort(key=lambda item: item[1])
+                            summary = "\n\n".join(
+                                item[2] for item in chosen
+                            )
+
+                            st.success("Summary generated!")
+                            st.subheader("📝 Your Summary")
+                            st.write(summary)
+
+                            st.caption(
+                                f"PDF pages: {len(reader.pages)} | "
+                                f"Extracted words: {len(full_text.split())}"
+                            )
+
+                            st.download_button(
+                                "⬇️ Download Summary",
+                                data=summary,
+                                file_name="notes_summary.txt",
+                                mime="text/plain",
+                                use_container_width=True
+                            )
+
+            except Exception as error:
+                st.error(f"Could not read this PDF: {error}")
+
+# STUDY RESOURCES PAGE
+
+elif page == "Study Resources":
+    st.title("📚 Study Resources")
+    st.write("Useful learning resources for Computer Science students.")
+
+    st.divider()
+
+    st.subheader("🐍 Python Programming")
+    st.markdown(
+        "- [Python Official Tutorial](https://docs.python.org/3/tutorial/)\n"
+        "- [W3Schools Python](https://www.w3schools.com/python/)"
+    )
+
+    st.subheader("📊 NumPy and Pandas")
+    st.markdown(
+        "- [NumPy Documentation](https://numpy.org/doc/)\n"
+        "- [Pandas Documentation](https://pandas.pydata.org/docs/)"
+    )
+
+    st.subheader("🤖 Artificial Intelligence")
+    st.markdown(
+        "- [Google Machine Learning Education](https://developers.google.com/machine-learning/education)\n"
+        "- [Microsoft AI Learning](https://learn.microsoft.com/en-us/ai/)"
+    )
+
+    st.subheader("🎓 Free Online Courses")
+    st.markdown(
+        "- [SWAYAM](https://swayam.gov.in/)\n"
+        "- [NPTEL](https://nptel.ac.in/)\n"
+        "- [freeCodeCamp](https://www.freecodecamp.org/)"
+    )
+    
 # AI QUIZ GENERATOR PAGE
 elif page == "AI Quiz Generator":
     import json
@@ -826,444 +1010,134 @@ Every question must have four options.
 The answer must exactly match one option.
 Do not repeat questions.
 """
+              
+            try:
+                api_key = st.secrets["GEMINI_API_KEY"]
 
-
-        try:
-            api_key = st.secrets["GEMINI_API_KEY"]
-
-            response = requests.post(
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-                params={"key": api_key},
-                json={
-                    "contents": [
-                        {
-                            "parts": [
-                                {"text": prompt}
-                            ]
-                        }
-                    ],
-                    "generationConfig": {
-                        "temperature": 0.2,
-                        "maxOutputTokens": 1200
-                    }
-                },
-                timeout=60
-            )
-
-            response.raise_for_status()
-            data = response.json()
-
-            answer = (
-                data["candidates"][0]["content"]["parts"][0]["text"]
-                .strip()
-            )
-        except KeyError:
-            st.error("GEMINI_API_KEY is missing from Streamlit Secrets.")
-        except Exception as e:
-            st.error(f"Quiz generation failed: {e}")
-     
-    # Display generated quiz
-    questions = st.session_state.get("ai_quiz_questions", [])
-
-    if questions:
-        st.divider()
-        st.subheader(
-            f"Quiz: {st.session_state.get('ai_quiz_topic', '')}"
-        )
-
-        with st.form("ai_quiz_answer_form"):
-            answers = []
-
-            for i, item in enumerate(questions):
-                st.markdown(f"**Q{i + 1}. {item.get('question', '')}**")
-                options = item.get("options", [])
-
-                if len(options) == 4:
-                    selected = st.radio(
-                        "Select an answer",
-                        options,
-                        index=None,
-                        key=f"ai_quiz_answer_{i}",
-                        label_visibility="collapsed"
+                with st.spinner("Generating your quiz..."):
+                    response = requests.post(
+                        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+                        params={"key": api_key},
+                        json={
+                            "contents": [
+                                {"parts": [{"text": prompt}]}
+                            ],
+                            "generationConfig": {
+                                "temperature": 0.2,
+                                "maxOutputTokens": 2500
+                            }
+                        },
+                        timeout=60
                     )
-                    answers.append(selected)
-                else:
-                    st.warning(f"Question {i + 1} has invalid options.")
-                    answers.append(None)
 
-            submitted = st.form_submit_button("Submit Answers")
+                    response.raise_for_status()
+                    data = response.json()
 
-        if submitted:
-            score = sum(
-                1 for item, selected in zip(questions, answers)
-                if selected is not None
-                and selected == item.get("answer")
-            )
-            st.session_state["ai_quiz_score"] = score
+                    answer_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
-        if "ai_quiz_score" in st.session_state:
-            score = st.session_state["ai_quiz_score"]
-            st.success(f"Your Score: {score} / {len(questions)}")
+                    if answer_text.startswith("```"):
+                        answer_text = answer_text.replace("```json", "", 1)
+                        answer_text = answer_text.replace("```", "").strip()
 
-            for i, item in enumerate(questions):
-                st.markdown(f"**Q{i + 1}. Correct Answer:**")
-                st.write(item.get("answer", "Not available"))
-                st.write(
-                    "Explanation: "
-                    + item.get("explanation", "No explanation available.")
-                )
+                    quiz_data = json.loads(answer_text)
+                    questions = quiz_data.get("questions", [])
 
+                    if questions:
+                        st.session_state["ai_quiz_questions"] = questions
+                        st.session_state["ai_quiz_topic"] = topic
+                        st.session_state["ai_quiz_answers"] = {}
+                        st.success("Quiz generated successfully!")
+                    else:
+                        st.error("No questions were generated.")
 
+            except KeyError:
+                st.error("GEMINI_API_KEY is missing from Streamlit Secrets.")
+            except requests.exceptions.Timeout:
+                st.error("Request timed out. Please try again.")
+            except requests.exceptions.RequestException as e:
+                st.error(f"Gemini API request failed: {e}")
+            except (json.JSONDecodeError, ValueError):
+                st.error("The AI returned invalid quiz data. Try again.")
+            except Exception as e:
+                st.error(f"Quiz generation failed: {e}")
 
-# CHAT HISTORY PAGE
-elif page == "Chat History":
-    st.subheader("💬 Saved Chat History")
-
-    history = get_chat_history()
-
-    if history:
-        st.warning("Deleted conversations cannot be restored.")
-
-        if st.button("🗑️ Clear All History", key="clear_all_history"):
-            st.session_state["confirm_clear_history"] = True
-
-        if st.session_state.get("confirm_clear_history", False):
-            st.write("Are you sure you want to delete all saved chats?")
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                if st.button("Yes, Delete All", key="confirm_delete_all"):
-                    clear_chat_history()
-                    st.session_state["confirm_clear_history"] = False
-                    st.success("All chat history deleted.")
-                    st.rerun()
-
-            with col2:
-                if st.button("Cancel", key="cancel_delete_all"):
-                    st.session_state["confirm_clear_history"] = False
-                    st.rerun()
-
-        for row in history:
-            with st.expander(f"Question: {row[1]}"):
-                st.write("**Answer:**")
-                st.write(row[2])
-                st.caption(f"Saved on: {row[3]}")
-
-                if st.button("🗑️ Delete This Chat", key=f"delete_chat_{row[0]}"):
-                    delete_chat(row[0])
-                    st.success("Chat deleted.")
-                    st.rerun()
-
-        st.success(f"Total saved conversations: {len(history)}")
-
-    else:
-        st.info("No conversations saved yet.")
-# ASSIGNMENTS AND EXAMS PAGE
-elif page == "Assignments & Exams":
-    st.subheader("📝 Assignment and Exam Planner")
-
-    with st.form("assignment_form"):
-        task = st.text_input("Assignment or exam name")
-        due_date = st.date_input("Due date")
-
-        task_type = st.selectbox(
-            "Task type",
-            ["Assignment", "Exam", "Project"],
-        )
-
-        submitted = st.form_submit_button("Save Task")
-
-    if submitted:
-        if task.strip():
-            save_assignment(
-                task.strip(),
-                due_date.isoformat(),
-                task_type,
-            )
-            st.success("Task saved successfully!")
-        else:
-            st.warning("Please enter a task name.")
-
-    tasks = get_assignments()
-
-    st.subheader("Saved Tasks")
-
-    if tasks:
-        st.dataframe(
-            [
-                {
-                    "ID": row[0],
-                    "Task": row[1],
-                    "Due Date": row[2],
-                    "Type": row[3],
-                }
-                for row in tasks
-            ],
-            use_container_width=True,
-        )
-    else:
-        st.info("No assignments or exams saved yet.")
-
-
-# NOTES UPLOAD AND AI SUMMARIZER PAGE
-elif page == "Notes Summarizer":
-    import requests
-    from pypdf import PdfReader
-    from io import BytesIO
-
-    st.subheader("📚 Notes Upload & AI Summarizer")
-    st.write(
-        "Upload your PDF study notes to generate a summary "
-        "and important revision points."
-    )
-
-    uploaded_file = st.file_uploader(
-        "Upload PDF Notes",
-        type=["pdf"],
-        key="notes_pdf_upload"
-    )
-
-    summary_language = st.selectbox(
-        "Select Summary Language",
-        ["English", "मराठी (Marathi)", "हिंदी (Hindi)"],
-        key="notes_summary_language"
-    )
-
-    if uploaded_file is not None:
-        if uploaded_file.size > 10 * 1024 * 1024:
-            st.error("Please upload a PDF smaller than 10 MB.")
-
-        else:
-            if st.button("✨ Generate Summary", key="generate_notes_summary"):
-                try:
-                    with st.spinner("Reading your PDF notes..."):
-                        pdf_reader = PdfReader(
-                            BytesIO(uploaded_file.getvalue())
-                        )
-
-                        if pdf_reader.is_encrypted:
-                            st.error(
-                                "This PDF is password-protected. "
-                                "Please upload an unlocked PDF."
-                            )
-                        else:
-                            pages_text = []
-
-                            for pdf_page in pdf_reader.pages:
-                                pages_text.append(
-                                    pdf_page.extract_text() or ""
-                                )
-
-                            document_text = "\n".join(pages_text).strip()
-
-                            if not document_text:
-                                st.error(
-                                    "No readable text found. "
-                                    "Scanned PDFs may need OCR first."
-                                )
-
-                            elif len(document_text) > 20000:
-                                st.warning(
-                                    "Only the first 20,000 characters "
-                                    "will be summarized."
-                                )
-                                document_text = document_text[:20000]
-
-                            if document_text:
-                                language_rule = {
-                                    "English": "Write in clear English.",
-                                    "मराठी (Marathi)": (
-                                        "Write in simple Marathi using "
-                                        "Devanagari script."
-                                    ),
-                                    "हिंदी (Hindi)": (
-                                        "Write in simple Hindi using "
-                                        "Devanagari script."
-                                    ),
-                                }[summary_language]
-
-                                prompt = f"""
-You are a helpful study assistant.
-
-Summarize the following student notes.
-{language_rule}
-
-Use these headings:
-1. Short Summary
-2. Important Points
-3. Key Terms
-4. Quick Revision
-
-Use only information supported by the notes.
-Do not invent facts. Keep the language simple.
-
-PDF NOTES:
-{document_text}
-
-SUMMARY:
-"""
-
-                                with st.spinner("AI is summarizing your notes..."):
-                                    response = requests.post(
-                                        "http://localhost:11434/api/generate",
-                                        json={
-                                            "model": "llama3.2:latest",
-                                            "prompt": prompt,
-                                            "stream": False,
-                                            "options": {
-                                                "temperature": 0.2,
-                                                "num_predict": 1000,
-                                                "repeat_penalty": 1.2
-                                            }
-                                        },
-                                        timeout=300
-                                    )
-
-                                    response.raise_for_status()
-                                    summary = response.json().get(
-                                        "response", ""
-                                    ).strip()
-
-                                if summary:
-                                    st.session_state["notes_summary"] = summary
-                                    st.session_state["notes_filename"] = (
-                                        uploaded_file.name
-                                    )
-                                else:
-                                    st.error(
-                                        "No summary generated. Please try again."
-                                    )
-
-                
-except requests.exceptions.ConnectionError:
-    st.error(
-        "Unable to connect to the AI service. "
-        "Please check your internet connection."
-    )
-except requests.exceptions.Timeout:
-    st.error(
-        "The AI took too long. Please try again."
-    )
-except Exception as e:
-    st.error(f"Could not process the PDF: {e}")
 
     if st.session_state.get("notes_summary"):
         st.divider()
         st.subheader("📖 Your Study Summary")
-        st.caption(
-            "File: "
-            + st.session_state.get("notes_filename", "Uploaded PDF")
-        )
-        st.markdown(st.session_state["notes_summary"])
-
-        st.download_button(
-            "⬇️ Download Summary",
-            data=st.session_state["notes_summary"],
-            file_name="study_summary.txt",
-            mime="text/plain",
-            key="download_notes_summary"
-        )
-
-
+        
 # STUDY RESOURCES PAGE
+
 elif page == "Study Resources":
     st.subheader("📚 Study Resources")
-    st.write("Search for tutorials and official documentation.")
+    st.write("Useful learning resources for students.")
 
     resources = [
         {
-            "topic": "Python",
-            "title": "Python Official Tutorial",
-            "url": "https://docs.python.org/3/tutorial/",
-            "description": "Learn Python basics, functions, loops, and modules."
+            "title": "Python Programming",
+            "url": "https://docs.python.org/3/tutorial/"
         },
         {
-            "topic": "Pandas",
-            "title": "Pandas Documentation",
-            "url": "https://pandas.pydata.org/docs/",
-            "description": "Learn data analysis using DataFrames and Series."
+            "title": "W3Schools Tutorials",
+            "url": "https://www.w3schools.com/"
         },
         {
-            "topic": "NumPy",
-            "title": "NumPy Documentation",
-            "url": "https://numpy.org/doc/",
-            "description": "Learn numerical computing and arrays."
+            "title": "GeeksforGeeks",
+            "url": "https://www.geeksforgeeks.org/"
         },
         {
-            "topic": "Streamlit",
-            "title": "Streamlit Documentation",
-            "url": "https://docs.streamlit.io/",
-            "description": "Learn to build interactive Python web applications."
+            "title": "NPTEL Online Courses",
+            "url": "https://nptel.ac.in/"
         },
         {
-            "topic": "AI",
-            "title": "Google Machine Learning Education",
-            "url": "https://developers.google.com/machine-learning",
-            "description": "Explore machine learning concepts and tutorials."
-        },
-        {
-            "topic": "NLP",
-            "title": "NLTK Documentation",
-            "url": "https://www.nltk.org/",
-            "description": "Explore natural language processing tools for Python."
-        },
-        {
-            "topic": "Database",
-            "title": "SQLite Documentation",
-            "url": "https://www.sqlite.org/docs.html",
-            "description": "Learn database basics and SQL operations."
+            "title": "SWAYAM Online Courses",
+            "url": "https://swayam.gov.in/"
         }
     ]
 
-    search_query = st.text_input(
-        "🔍 Search Study Topics",
-        placeholder="Example: Python, AI, database..."
-    )
-
-    selected_topic = st.selectbox(
-        "Filter by Topic",
-        ["All Topics", "Python", "Pandas", "NumPy",
-         "Streamlit", "AI", "NLP", "Database"]
-    )
-
-    filtered_resources = []
-
     for resource in resources:
-        matches_search = (
-            search_query.strip().lower() in
-            (
-                resource["topic"] + " " +
-                resource["title"] + " " +
-                resource["description"]
-            ).lower()
+        st.markdown(
+            f"- [{resource['title']}]({resource['url']})"
         )
 
-        matches_topic = (
-            selected_topic == "All Topics"
-            or resource["topic"] == selected_topic
-        )
 
-        if matches_search and matches_topic:
-            filtered_resources.append(resource)
+    st.subheader("📖 Available Resources")
 
-    st.markdown(
-        f"### 📖 Available Resources: {len(filtered_resources)}"
+    resource_type = st.selectbox(
+        "Select Resource Type",
+        [
+            "Notes",
+            "Syllabus",
+            "Question Papers",
+            "Reference Materials"
+        ]
     )
 
-    if filtered_resources:
-        for resource in filtered_resources:
-            with st.container(border=True):
-                st.markdown(f"#### 📘 {resource['title']}")
-                st.write(resource["description"])
-                st.caption(f"Topic: {resource['topic']}")
-                st.markdown(f"[Open Resource ↗]({resource['url']})")
-    else:
-        st.warning(
-            "No resources found. Try another keyword or topic."
+    if resource_type == "Notes":
+        st.info("Upload or open your subject notes here.")
+    elif resource_type == "Syllabus":
+        st.info("View your subject syllabus here.")
+    elif resource_type == "Question Papers":
+        st.info("Access previous question papers here.")
+    elif resource_type == "Reference Materials":
+        st.info("Find useful reference materials here.")
+
+    st.divider()
+    st.subheader("🔎 Search Resources")
+
+    search_query = st.text_input(
+        "Enter subject or resource name",
+        placeholder="e.g. Python, Database Management"
+    )
+
+    if search_query:
+        st.write(f"Search query: **{search_query}**")
+        st.caption(
+            "Connect this search to your resource database "
+            "to display matching files."
         )
 
-# ACADEMIC PLANNER PAGE
+# ACADEMIC PLANNER PAGE        
 elif page == "Academic Planner":
     from datetime import date, datetime, timedelta
 
@@ -1520,8 +1394,6 @@ elif page == "Academic Planner":
         st.info("No exams scheduled in the next 7 days.")
 
     st.divider()
-
-    
     
     # Add assignment submission
     st.markdown("### 📝 Add Assignment Submission")
@@ -1577,8 +1449,6 @@ elif page == "Academic Planner":
     else:
         st.write("No assignment submissions added yet.")
 
-        
-    
     
     # ADVANCED ACADEMIC ANALYTICS
     st.markdown("### 📊 Advanced Academic Analytics")
