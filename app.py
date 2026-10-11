@@ -755,6 +755,31 @@ elif page == "AI Assistant":
 
         return answers[topic].get(language, answers[topic]["English"])
 
+    # Display previous chat messages
+    if "chat_messages" not in st.session_state:
+        st.session_state["chat_messages"] = []
+
+    for message in st.session_state["chat_messages"]:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # Question input box
+    question = st.chat_input("💬 Type your question here...")
+
+    if question:
+        st.session_state["chat_messages"].append({
+            "role": "user",
+            "content": question
+        })
+
+        answer = get_local_answer(question)
+
+        st.session_state["chat_messages"].append({
+            "role": "assistant",
+            "content": answer
+        })
+
+        st.rerun()
 
 # ASSIGNMENTS & EXAMS PAGE
 elif page == "Assignments & Exams":
@@ -943,7 +968,7 @@ elif page == "Study Resources":
         "- [NPTEL](https://nptel.ac.in/)\n"
         "- [freeCodeCamp](https://www.freecodecamp.org/)"
     )
-    
+
 # AI QUIZ GENERATOR PAGE
 elif page == "AI Quiz Generator":
     import json
