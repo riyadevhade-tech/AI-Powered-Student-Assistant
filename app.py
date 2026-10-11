@@ -1,6 +1,7 @@
 import os
 import streamlit as st
 import sqlite3
+import uuid
 from datetime import datetime
 import streamlit.components.v1 as components
 import json
@@ -414,6 +415,57 @@ st.title("🎓 AI-Powered Student Assistant")
 st.caption("Your Smart Academic Support Platform")
 
 
+def init_chat_db():
+    conn = sqlite3.connect("chat_history.db")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chat_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            message TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def save_chat_message(session_id, role, message):
+    conn = sqlite3.connect("chat_history.db")
+    conn.execute(
+        """INSERT INTO chat_history
+        (session_id, role, message, created_at)
+        VALUES (?, ?, ?, ?)""",
+        (
+            session_id,
+            role,
+            message,
+            datetime.now().isoformat(timespec="seconds")
+        )
+    )
+    conn.commit()
+    conn.close()
+
+
+def load_chat_history(session_id):
+    conn = sqlite3.connect("chat_history.db")
+    rows = conn.execute(
+        """SELECT role, message, created_at
+        FROM chat_history
+        WHERE session_id = ?
+        ORDER BY id""",
+        (session_id,)
+    ).fetchall()
+    conn.close()
+    return rows
+
+
+init_chat_db()
+
+if "chat_session_id" not in st.session_state:
+    st.session_state["chat_session_id"] = str(uuid.uuid4())
+
+
 # Sidebar menu
 if "selected_page" not in st.session_state:
     st.session_state["selected_page"] = "Home"
@@ -764,21 +816,34 @@ elif page == "AI Assistant":
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
+    
     # Question input box
     question = st.chat_input("💬 Type your question here...")
 
     if question:
+        session_id = st.session_state["chat_session_id"]
+
+        save_chat_message(session_id, "user", question)
+
+answer = get_local_answer(question)
+
+save_chat_message(session_id, "assistant", answer)
+
+        # Save user question
         st.session_state["chat_messages"].append({
             "role": "user",
             "content": question
         })
+        save_chat_message(session_id, "user", question)
 
+        # Generate and save answer
         answer = get_local_answer(question)
 
         st.session_state["chat_messages"].append({
             "role": "assistant",
             "content": answer
         })
+        save_chat_message(session_id, "assistant", answer)
 
         st.rerun()
 
