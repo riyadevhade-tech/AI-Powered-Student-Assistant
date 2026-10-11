@@ -1135,16 +1135,18 @@ SUMMARY:
                                         "No summary generated. Please try again."
                                     )
 
-                except requests.exceptions.ConnectionError:
-                    st.error(
-                        "Ollama is not running. Please start Ollama."
-                    )
-                except requests.exceptions.Timeout:
-                    st.error(
-                        "The AI took too long. Please try again."
-                    )
-                except Exception as e:
-                    st.error(f"Could not process the PDF: {e}")
+                
+except requests.exceptions.ConnectionError:
+    st.error(
+        "Unable to connect to the AI service. "
+        "Please check your internet connection."
+    )
+except requests.exceptions.Timeout:
+    st.error(
+        "The AI took too long. Please try again."
+    )
+except Exception as e:
+    st.error(f"Could not process the PDF: {e}")
 
     if st.session_state.get("notes_summary"):
         st.divider()
