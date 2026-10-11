@@ -715,19 +715,22 @@ if page == "Home":
 
 # CHAT HISTORY PAGE
 elif page == "Chat History":
-    st.subheader("💬 Chat History")
+    st.title("💬 Chat History")
+    st.write("Your saved questions and answers")
 
-    history = get_chat_history()
+    session_id = st.session_state["chat_session_id"]
+    history = load_chat_history(session_id)
+
+    st.write("Messages found:", len(history))
 
     if history:
-        for row in reversed(history):
-            with st.chat_message("user"):
-                st.write(row[1])
-
-            with st.chat_message("assistant"):
-                st.markdown(row[2])
+        for role, message, created_at in history:
+            with st.chat_message(role):
+                st.markdown(message)
+                st.caption(created_at)
     else:
         st.info("No chat history available yet.")
+
 
 # AI ASSISTANT PAGE
 elif page == "AI Assistant":
