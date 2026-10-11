@@ -816,18 +816,32 @@ elif page == "AI Assistant":
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    
+        
     # Question input box
     question = st.chat_input("💬 Type your question here...")
 
     if question:
         session_id = st.session_state["chat_session_id"]
 
+        # Save user question
+        st.session_state["chat_messages"].append({
+            "role": "user",
+            "content": question
+        })
         save_chat_message(session_id, "user", question)
 
-answer = get_local_answer(question)
+        # Generate answer
+        answer = get_local_answer(question)
 
-save_chat_message(session_id, "assistant", answer)
+        # Save assistant answer
+        st.session_state["chat_messages"].append({
+            "role": "assistant",
+            "content": answer
+        })
+        save_chat_message(session_id, "assistant", answer)
+
+        st.rerun()
+
 
         # Save user question
         st.session_state["chat_messages"].append({
