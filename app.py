@@ -612,16 +612,53 @@ if page == "Home":
     action1, action2, action3 = st.columns(3, gap="medium")
 
     with action1:
-        st.button("🤖 AI Assistant", use_container_width=True)
-        st.button("📝 Assignments & Exams", use_container_width=True)
+        st.button(
+            "🤖 AI Assistant",
+            use_container_width=True,
+            on_click=go_to_page,
+            args=("AI Assistant",),
+            key="home_ai_assistant",
+        )
+        st.button(
+            "📝 Assignments & Exams",
+            use_container_width=True,
+            on_click=go_to_page,
+            args=("Assignments & Exams",),
+            key="home_assignments",
+        )
 
     with action2:
-        st.button("📚 Study Resources", use_container_width=True)
-        st.button("📅 Smart Timetable", use_container_width=True)
+        st.button(
+            "📚 Study Resources",
+            use_container_width=True,
+            on_click=go_to_page,
+            args=("Study Resources",),
+            key="home_resources",
+        )
+        st.button(
+            "📅 Smart Timetable",
+            use_container_width=True,
+            on_click=go_to_page,
+            args=("Smart Timetable",),
+            key="home_timetable",
+        )
 
     with action3:
-        st.button("🧠 AI Quiz Generator", use_container_width=True)
-        st.button("📖 Notes Summarizer", use_container_width=True)
+        st.button(
+            "🧠 AI Quiz Generator",
+            use_container_width=True,
+            on_click=go_to_page,
+            args=("AI Quiz Generator",),
+            key="home_quiz",
+        )
+        st.button(
+            "📖 Notes Summarizer",
+            use_container_width=True,
+            on_click=go_to_page,
+            args=("Notes Summarizer",),
+            key="home_notes",
+        )
+
 
 # AI ASSISTANT PAGE
 elif page == "AI Assistant":
@@ -636,166 +673,90 @@ elif page == "AI Assistant":
         ["मराठी (Marathi)", "English", "हिंदी (Hindi)"]
     )
 
+   
     def get_local_answer(question):
-        import requests
+        q = question.lower().strip()
+
+        answers = {
+            "python": {
+                "English": "Python is a beginner-friendly programming language used for web development, automation, data analysis, and AI. Example:\n\n```python\nprint('Hello, World!')\n```\nOutput: Hello, World!",
+                "मराठी (Marathi)": "Python ही शिकायला सोपी programming language आहे. तिचा वापर AI, data analysis आणि automation साठी होतो.\n\n```python\nprint('Hello, World!')\n```\nOutput: Hello, World!",
+                "हिंदी (Hindi)": "Python एक आसान programming language है। इसका उपयोग AI, data analysis और automation में होता है।\n\n```python\nprint('Hello, World!')\n```\nOutput: Hello, World!"
+            },
+            "ai": {
+                "English": "Artificial Intelligence (AI) enables computers to perform tasks that normally require human intelligence, such as understanding language, recognizing patterns, and solving problems.",
+                "मराठी (Marathi)": "Artificial Intelligence (AI) म्हणजे संगणकाला शिकणे, माहिती समजून घेणे आणि समस्या सोडवणे यांसारखी कामे करण्यास सक्षम करणारे तंत्रज्ञान.",
+                "हिंदी (Hindi)": "Artificial Intelligence (AI) ऐसी तकनीक है जो कंप्यूटर को सीखने, भाषा समझने और समस्याएँ हल करने जैसे काम करने में सक्षम बनाती है।"
+            },
+            "pandas": {
+                "English": "Pandas is a Python library used to organize, analyze, and manipulate data in tables called DataFrames.\n\n```python\nimport pandas as pd\ndata = {'Name': ['Riya', 'Asha'], 'Marks': [80, 90]}\ndf = pd.DataFrame(data)\nprint(df)\n```",
+                "मराठी (Marathi)": "Pandas ही Python library आहे. तिचा वापर tabular data व्यवस्थित करण्यासाठी आणि त्याचे analysis करण्यासाठी होतो. DataFrame मध्ये data rows आणि columns मध्ये ठेवता येतो.",
+                "हिंदी (Hindi)": "Pandas एक Python library है जिसका उपयोग tabular data को व्यवस्थित करने और उसका analysis करने के लिए किया जाता है।"
+            },
+            "numpy": {
+                "English": "NumPy is a Python library used for numerical calculations and working efficiently with arrays.",
+                "मराठी (Marathi)": "NumPy ही Python library आहे. तिचा वापर numerical calculations आणि arrays वर जलद प्रक्रिया करण्यासाठी होतो.",
+                "हिंदी (Hindi)": "NumPy एक Python library है जिसका उपयोग numerical calculations और arrays पर काम करने के लिए होता है।"
+            },
+            "nlp": {
+                "English": "Natural Language Processing (NLP) helps computers process, understand, and respond to human language. It is used in chatbots and language translation.",
+                "मराठी (Marathi)": "Natural Language Processing (NLP) हे तंत्रज्ञान संगणकाला मानवी भाषा समजून घेण्यास आणि त्यावर प्रक्रिया करण्यास मदत करते. Chatbots मध्ये याचा वापर होतो.",
+                "हिंदी (Hindi)": "Natural Language Processing (NLP) कंप्यूटर को मानवीय भाषा समझने और उस पर काम करने में मदद करता है। इसका उपयोग chatbots में होता है।"
+            },
+            "study": {
+                "English": "Study tips:\n1. Make a daily study timetable.\n2. Divide topics into small sections.\n3. Practise questions regularly.\n4. Take short breaks.\n5. Revise important concepts before exams.",
+                "मराठी (Marathi)": "अभ्यासासाठी टिप्स:\n1. रोजचे study timetable बनवा.\n2. मोठे topics छोट्या भागांत विभागा.\n3. नियमित प्रश्न सोडवा.\n4. मध्ये थोडी विश्रांती घ्या.\n5. परीक्षेपूर्वी महत्त्वाच्या संकल्पनांची उजळणी करा.",
+                "हिंदी (Hindi)": "पढ़ाई के लिए सुझाव:\n1. रोज़ का timetable बनाएँ।\n2. बड़े topics को छोटे भागों में बाँटें।\n3. नियमित प्रश्न हल करें।\n4. बीच में छोटे breaks लें।\n5. परीक्षा से पहले revision करें।"
+            }
+        }
 
 
-        
-        prompt = f"""
-You are a helpful teacher for Indian college students.
+        if "pandas" in q:
+            topic = "pandas"
+        elif "numpy" in q:
+            topic = "numpy"
+        elif "nlp" in q or "natural language processing" in q:
+            topic = "nlp"
+        elif any(word in q for word in [
+            "artificial intelligence",
+            "what is ai",
+            " ai",
+            "कृत्रिम बुद्धिमत्ता"
+        ]):
+            topic = "ai"
+        elif any(word in q for word in [
+            "study tips", "study plan", "अभ्यास", "पढ़ाई"
+        ]):
+            topic = "study"
+        elif "python" in q or "पायथन" in q:
+            topic = "python"
+        else:
+            if language == "मराठी (Marathi)":
+                return "या प्रश्नाचे उत्तर सध्याच्या knowledge base मध्ये नाही. कृपया Python, AI, Pandas, NumPy, NLP किंवा अभ्यासाच्या टिप्स याबद्दल विचारा."
+            elif language == "हिंदी (Hindi)":
+                return "इस प्रश्न का उत्तर वर्तमान knowledge base में नहीं है। कृपया Python, AI, Pandas, NumPy, NLP या पढ़ाई से संबंधित प्रश्न पूछें।"
+            return "I don't have an answer for this question in my current knowledge base. Try asking about Python, AI, Pandas, NumPy, NLP, or study tips."
 
-IMPORTANT LANGUAGE RULE:
-The selected answer language is: {language}
+        return answers[topic].get(language, answers[topic]["English"])
 
-If the selected language is Marathi:
-- Write the entire answer in natural Marathi using Devanagari script.
-- Explain technical terms in simple Marathi.
-- You may keep technical words like Python, coding, and programming in English.
-- Do not write Hindi or Urdu sentences.
-- Give a correct answer to the question.
-
-If the selected language is Hindi:
-- Write the entire answer in natural Hindi using Devanagari script.
-
-If the selected language is English:
-- Write the entire answer in clear, simple English.
-
-
-Keep the answer accurate, clear, and easy for a college student to understand.
-
-For programming questions:
-- Explain the concept in simple language.
-- Give one complete, correct Python code example.
-- Explain the code briefly.
-- Show the expected output.
-- Never stop in the middle of a sentence or code example.
-- Keep the answer concise but complete.
-- Use the selected answer language consistently.
-
-Student question: {question}
-
-
-Answer in {language}:
-"""
-
-
-        try:
-            response = requests.post(
-                "http://localhost:11434/api/generate",
-                json={
-                    "model": "llama3.2:latest",
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {
-    "num_predict": 250,
-    "temperature": 0.2,
-    "repeat_penalty": 1.2,
-    "repeat_last_n": 64
-}
-                },
-                timeout=300
-            )
-            response.raise_for_status()
-
-            answer = response.json().get(
-                "response", ""
-            ).strip()
-
-            return answer or "No answer generated. Please try again."
-
-        except requests.exceptions.ConnectionError:
-            return "Ollama is not running. Please start Ollama."
-
-        except requests.exceptions.Timeout:
-            return "AI response timed out. Please try again."
-
-        except Exception as e:
-            return f"AI error: {e}"
 
     # Display saved conversations
     for row in reversed(get_chat_history()):
         with st.chat_message("user"):
             st.write(row[1])
-
         with st.chat_message("assistant"):
             st.write(row[2])
 
-    
-    # Ask a new question
     question = st.chat_input("Ask your academic question...")
 
-    # Quick Questions
-    st.markdown("### 💡 Quick Questions")
-
-    col1, col2 = st.columns(2)
-
-    if col1.button("🐍 Python Basics", key="quick_python_basics"):
-        st.session_state["suggested_question"] = (
-            "Explain Python basics with a simple example."
-        )
-
-    if col2.button("🧠 What is AI?", key="quick_what_is_ai"):
-        st.session_state["suggested_question"] = (
-            "Explain Artificial Intelligence in simple words."
-        )
-
-    if col1.button("📊 Explain Pandas", key="quick_explain_pandas"):
-        st.session_state["suggested_question"] = (
-            "What is Pandas in Python? Give an example."
-        )
-
-    if col2.button("🎓 Study Tips", key="quick_study_tips"):
-        st.session_state["suggested_question"] = (
-            "Give me useful study tips for college exams."
-        )
-
-    # Get the selected quick question
-    suggested_question = st.session_state.pop(
-        "suggested_question", None
-    )
-
-    if suggested_question:
-        question = suggested_question
-
-    # Process the question
     if question:
         with st.chat_message("user"):
             st.write(question)
 
-        with st.chat_message("assistant"):
-            with st.spinner("🤖 AI is thinking... Please wait"):
-                answer = get_local_answer(question)
-
-            if answer.startswith("AI error:"):
-                st.error(answer)
-            elif answer in [
-                "Ollama is not running. Please start Ollama.",
-                "AI response timed out. Please try again.",
-            ]:
-                st.warning(answer)
-            else:
-                st.markdown(answer)
-
-        save_chat(question, answer)
-
-
-    if question:
-        with st.chat_message("user"):
-            st.write(question)
+        answer = get_local_answer(question)
 
         with st.chat_message("assistant"):
-            with st.spinner("🤖 AI is thinking... Please wait"):
-                answer = get_local_answer(question)
-
-            if answer.startswith("AI error:"):
-                st.error(answer)
-            elif answer in [
-                "Ollama is not running. Please start Ollama.",
-                "AI response timed out. Please try again.",
-            ]:
-                st.warning(answer)
-            else:
-                st.markdown(answer)
+            st.markdown(answer)
 
         save_chat(question, answer)
 
@@ -866,45 +827,41 @@ The answer must exactly match one option.
 Do not repeat questions.
 """
 
-            try:
-                with st.spinner("Generating quiz..."):
-                    response = requests.post(
-                        "http://localhost:11434/api/generate",
-                        json={
-                            "model": "llama3.2:latest",
-                            "prompt": prompt,
-                            "stream": False,
-                            "format": "json",
-                            "options": {
-                                "temperature": 0.2,
-                                "num_predict": 1800
-                            }
-                        },
-                        timeout=300
-                    )
 
-                    response.raise_for_status()
-                    quiz_data = json.loads(
-                        response.json().get("response", "")
-                    )
-                    questions = quiz_data.get("questions", [])
+        try:
+            api_key = st.secrets["GEMINI_API_KEY"]
 
-                    if not questions:
-                        st.error("No questions generated. Please try again.")
-                    else:
-                        st.session_state["ai_quiz_questions"] = questions
-                        st.session_state["ai_quiz_topic"] = topic
-                        st.session_state.pop("ai_quiz_score", None)
+            response = requests.post(
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+                params={"key": api_key},
+                json={
+                    "contents": [
+                        {
+                            "parts": [
+                                {"text": prompt}
+                            ]
+                        }
+                    ],
+                    "generationConfig": {
+                        "temperature": 0.2,
+                        "maxOutputTokens": 1200
+                    }
+                },
+                timeout=60
+            )
 
-            except requests.exceptions.ConnectionError:
-                st.error("Ollama is not running. Please start Ollama.")
-            except requests.exceptions.Timeout:
-                st.error("The AI response timed out. Please try again.")
-            except (json.JSONDecodeError, ValueError):
-                st.error("Invalid quiz format. Please generate the quiz again.")
-            except Exception as e:
-                st.error(f"Quiz generation failed: {e}")
+            response.raise_for_status()
+            data = response.json()
 
+            answer = (
+                data["candidates"][0]["content"]["parts"][0]["text"]
+                .strip()
+            )
+        except KeyError:
+            st.error("GEMINI_API_KEY is missing from Streamlit Secrets.")
+        except Exception as e:
+            st.error(f"Quiz generation failed: {e}")
+     
     # Display generated quiz
     questions = st.session_state.get("ai_quiz_questions", [])
 
@@ -1411,8 +1368,14 @@ elif page == "Academic Planner":
     .academic-indigo {
         background: linear-gradient(135deg,#4338CA,#7C3AED);
     }
+    
     </style>
     """, unsafe_allow_html=True)
+
+    total_assignments = 0
+    submitted_assignments = 0
+    pending_assignments = 0
+    upcoming_deadlines = 0
 
     st.markdown("""
     <h2 style="color:#6366F1;">📊 Academic Overview</h2>
@@ -1457,7 +1420,7 @@ elif page == "Academic Planner":
         <div class="academic-card academic-pink">
             <div style="font-size:25px;">📚</div>
             <div class="academic-label">Total Exams</div>
-            <div class="academic-value">{len(dashboard_exams)}</div>
+            <div class="academic-value">{len(get_exams())}</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1854,15 +1817,20 @@ elif page == "Smart Timetable":
 
     st.title("📅 Smart Timetable")
 
-    st_autorefresh(
-        interval=30 * 1000,
-        key="student_assistant_reminder_refresh"
-    )
+    st.write("Create and manage your weekly class timetable.")
+
+    with st.form("timetable_form"):
+        subject = st.text_input("Subject Name")
+        day = st.selectbox(
+            "Day",
+            ["Monday", "Tuesday", "Wednesday", "Thursday",
+             "Friday", "Saturday", "Sunday"]
+        )
 
     st.write("Create and manage your weekly class timetable.")
 
 
-    with st.form("timetable_form"):
+    with st.form("weekly_timetable_form"):
         subject = st.text_input("Subject Name")
         day = st.selectbox(
             "Day",
